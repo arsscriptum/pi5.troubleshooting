@@ -384,3 +384,93 @@ Not useful here, despite being the standard advice:
 
 - Thermal camera. 28 mW produces nothing to see.
 - Current injection and gradient tracing. Both need a sub-20 Ω short.
+
+## Caacitors Debug
+
+### 1. TOP SIDE IDENTIFIABLE PARTS
+
+* **Broadcom BCM2712 SoC**: the large package marked `BROADCOM 2712...` is clearly visible.
+* **LPDDR memory**: large BGA package immediately above the BCM2712. The package is visually identifiable as the memory device, but its exact marking is not sufficiently legible.
+* **RP1 southbridge**: large Raspberry Pi-logo IC to the upper-right of the BCM2712.
+* **PMIC**: Dialog device in the lower-left power section. `DA9091` is readable on the package.
+* **Wireless module/shield**: shield can at upper-left. The shield/module reference designator is not legible.
+* **Ethernet PHY area**: IC immediately to the lower-right of RP1, between RP1 and the Ethernet connector. Its detailed marking is **not legible**.
+* **Ethernet magnetics/RJ45**: the large Traxcom Ethernet module is visible at lower-right. The actual magnetics are enclosed within the connector module, so individual transformer components cannot be inspected.
+* **USB**: `J11 / USB2` and `J12 / USB3`.
+* **GPIO**: `J8`.
+* **PCIe FFC**: `J20 / PCIe`.
+* **CAM/DISP**: `J3` and `J4`, with `CAM/DISP` silkscreen.
+* **PoE**: `J14 / PoE`.
+* **Ethernet**: `J10 / ETHERNET`.
+* **USB-C power**: `J1`.
+* **Battery connector**: `J5`, with `BAT` silkscreen.
+* **HDMI**: `HDMI0` and `HDMI1`; `J2` and `J13` are visible around the two connectors.
+* **UART**: `UART` silkscreen is visible. Its connector designator is not confidently legible.
+* **Fan**: `FAN` silkscreen and the small connector are visible; the adjacent designator is difficult to read.
+* Numerous small passives are visible around the PMIC, SoC, RP1, Ethernet PHY and I/O areas.
+
+## 2. BOTTOM SIDE IDENTIFIABLE PARTS
+
+* `J9 / SD CARD` is clearly visible.
+* Very large numbers of test points are labelled `TPxx`. Examples clearly visible include `TP2`, `TP3`, `TP4`, `TP5`, `TP6`, `TP7`, `TP8`, `TP9`, `TP10`, `TP11`, `TP12`, `TP13`, `TP14`, `TP15`, `TP16`, `TP17`, `TP18`, `TP19`, `TP20`, `TP21`, `TP23`, `TP24`, `TP25`, `TP26`, `TP28`, `TP29`, `TP30`, `TP31`, `TP32`, `TP33`, `TP34`, `TP36`, `TP38`, `TP39`, `TP41`, `TP43`, `TP44`, `TP45`, `TP46`, `TP47`, `TP48`, `TP50`, and many of `TP53` through `TP76`.
+* `FLASH WP` is clearly printed near the lower-central area.
+* There is a small **8-pin IC** on the lower-right/central portion of the bottom side. Its marking is not legible. **I cannot prove from this photograph alone that this is the SPI flash.** That identification is only a low-confidence visual inference.
+* The large central areas containing dense vias/fanout appear to correspond to areas beneath major IC packages, but I am **not assigning particular vias/passives to a particular net**.
+
+### 3. Passive density and rework accessibility
+
+| Region                               | Visible passive density | Hot-air accessibility                                  |
+| ------------------------------------ | ----------------------- | ------------------------------------------------------ |
+| **Top PMIC / power section**         | **High**                | Crowded, but components are exposed on the top surface |
+| **Bottom-left dense passive field**  | **High**                | Crowded; many small parts/test points                  |
+| **Bottom central BGA/routing field** | **Medium to high**      | Crowded, fine-pitch routing                            |
+| **Top around BCM2712**               | **Medium**              | Adjacent to large package/BGA                          |
+| **Top around RP1**                   | **Medium**              | Adjacent to BGA                                        |
+| **Top around LPDDR**                 | **Low nearby**          | Immediately adjacent to BGA                            |
+| **Ethernet PHY area**                | **Medium**              | Crowded, near connectors                               |
+| **CAM/DISP / PoE area**              | **Medium**              | Crowded between connectors                             |
+| **Bottom SD-card area**              | **Low to medium**       | Connector makes access restricted                      |
+| **USB/HDMI connector areas**         | **Low to medium**       | Connector-adjacent / partially obstructed              |
+| **GPIO perimeter**                   | **Low**                 | Relatively clear                                       |
+
+### 4. Relative likelihood of finding a 3.3 V decoupling capacitor
+
+This is **only a physical-placement inference**. The photographs cannot establish which capacitor is actually connected to 3.3 V.
+
+1. **Top PMIC/power region** - highest visual priority. There is a conspicuous concentration of capacitors and inductive/power components around the `DA9091`.
+2. **Bottom dense passive field** - very high priority. There are numerous small capacitors/resistors in a concentrated area, making this an important physical inspection zone.
+3. **Around the BCM2712 / LPDDR / RP1** - high priority. Large digital ICs normally have substantial local decoupling, and the photograph visibly shows populated areas around these packages.
+4. **Bottom central BGA/routing region** - high/medium priority. Dense passive population and extensive power/ground via structures are visible.
+5. **Ethernet PHY region** - medium priority.
+6. **CAM/DISP / PoE / I/O regions** - medium to low priority.
+7. **USB, HDMI, SD-card and connector-only areas** - lower priority based strictly on visible passive density.
+
+The important limitation is that **none of those observations identifies a capacitor as being on the 3.3 V rail**.
+
+### 5. Anomalies
+
+I do **not** see a feature that I would confidently classify from these photographs as:
+
+* cracked/chipped MLCC
+* obvious solder bridge
+* obvious solder ball
+* lifted component
+* burned/discolored PCB
+* gross tooling damage
+* localized residue clearly distinguishable from normal flux/test-point residue
+
+There are numerous bright/white-looking areas around test points and soldered features on the bottom side. I would **not call those residue or damage from these photographs** because they are also consistent with solder/test-point surfaces and photographic illumination.
+
+### 5. Annotated photographs
+
+I created full annotated inspection plates with numbered regions and a compact legend, including passive density, hot-air accessibility, relative 3.3 V inspection priority, and confidence.
+
+[**Review annotated Raspberry Pi 5 top-side inspection**](img/pi5_top_annotated.png)
+
+[**Review annotated Raspberry Pi 5 bottom-side inspection**](img/pi5_bottom_annotated.png)
+
+### Most useful observation for your 393 Ω measurement
+
+From the photographs alone, I would **not start removing random capacitors**. The visually concentrated areas worth examining first are the **PMIC/power section on the top** and the **large dense passive population on the bottom**. Those are the areas where the photographs give the strongest physical evidence for potentially relevant decoupling components.
+
+But the photographs cannot tell us which of those capacitors is actually connected to your measured GPIO1/3.3 V rail. The `393 Ω` versus `24 kΩ` measurement is therefore useful as an electrical fault indicator, but it cannot be mapped to a particular capacitor from these images alone.
