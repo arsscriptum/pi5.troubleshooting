@@ -14,6 +14,16 @@
    - [1.9 Short Localization](#19-short-localization)
    - [1.10 Decision Table](#110-decision-table)
    - [1.11 Rules and Notes](#111-rules-and-notes)
+2. [Finding the Shorted Capacitor on the 3.3V Rail](#2-finding-the-shorted-capacitor-on-the-33v-rail)
+   - [2.1 Read the Number Before You Reach for the Iron](#21-read-the-number-before-you-reach-for-the-iron)
+   - [2.2 Step 0: Validate the 393 Ω](#22-step-0-validate-the-393-%CF%89)
+   - [2.3 Build the 3V3 Cap Map from the Good Board](#23-build-the-3v3-cap-map-from-the-good-board)
+   - [2.4 Narrow It Down Without Removing Anything](#24-narrow-it-down-without-removing-anything)
+   - [2.5 Sequential Removal](#25-sequential-removal)
+   - [2.6 After the Fix, and the Honest Prognosis](#26-after-the-fix-and-the-honest-prognosis)
+   - [2.7 Tools](#27-tools)
+
+Figure and diagram prompts: [PROMPTS.md](PROMPTS.md)
 
 ---
 
@@ -135,7 +145,11 @@ Route B diagnostic split: if GPIO feed boots green but USB-C never does, the fau
 
 When Test D shows a shorted rail, find the offending component.
 
-1. **Low-current injection, thermal trace.** Feed the shorted rail from the bench supply at low voltage (0.5-1 V), current limit ~0.5 A, injected across the rail (pin 1 to pin 6 for 3.3V). The short sinks current and the faulty part heats. Find the hot spot by touch, thermal camera, freeze spray, or isopropyl evaporation (wet the area, the hot part dries first). Keep injected voltage low and current-limited: the supply is a controlled current source to heat the fault, not to energize the rail normally.
+The method depends on how hard the short is. Below ~20 Ω there is enough power at the fault to find it
+thermally, and steps 1-3 apply. For a partial short of a few hundred ohms, as measured here, there is not,
+and no thermal or current-injection method will work. Go to Section 2.
+
+1. **Low-current injection, thermal trace.** *Hard shorts only, under ~20 Ω.* Feed the shorted rail from the bench supply at low voltage (0.5-1 V), current limit ~0.5 A, injected across the rail (pin 1 to pin 6 for 3.3V). The short sinks current and the faulty part heats. Find the hot spot by touch, thermal camera, freeze spray, or isopropyl evaporation (wet the area, the hot part dries first). Keep injected voltage low and current-limited: the supply is a controlled current source to heat the fault, not to energize the rail normally.
 
 2. **Visual on the rail's decoupling caps.** The cluster of small ceramics around the PMIC and SoC. Look for cracked, discolored, or lifted caps. A cracked MLCC is the classic post-thermal short.
 
@@ -146,7 +160,7 @@ When Test D shows a shorted rail, find the offending component.
 | 5V rail (C) | 3.3V rail (D) | Bench current (E) | Verdict |
 |---|---|---|---|
 | Short (~0 Ω) | - | - | Shorted input. Dead PMIC or bulk cap. |
-| Normal | Short (low Ω) | skip | Downstream short. Localize and remove (1.9). Repairable. |
+| Normal | Short (low Ω) | skip | Downstream short. Localize and remove (1.9 hard short, Section 2 partial short). Repairable. |
 | Normal | Normal | ~0 A, red | Dead PMIC, non-shorted. RMA or scrap. |
 | Normal | Normal | green via GPIO, dead via USB-C | USB-C input front end fault. Core board fine. |
 | Normal | Normal | green, ~0.3-0.5 A | Board alive. Re-check externals. |
@@ -166,3 +180,207 @@ Pin 2  = 5V
 Pin 4  = 5V
 Pin 6  = GND
 ```
+
+---
+
+## 2. Finding the Shorted Capacitor on the 3.3V Rail
+
+Entry condition: Test D (1.7) read ~393 Ω from GPIO pin 1 to pin 6, against ~24 kΩ on the known-good board. This section takes that from "there is a short" to "this is the part."
+
+You have a known-good Pi 5. That is worth more than a schematic here, and the method below is built around it.
+
+Board photos of the suspect unit: `img/20261001_112322.jpg` (top), `img/20261001_112335.jpg` (bottom), `img/20261001_112347.jpg` (bottom, close).
+
+### 2.1 Read the Number Before You Reach for the Iron
+
+393 Ω across 3.3 V:
+
+```
+I = 3.3 / 393   = 8.4 mA
+P = 3.3² / 393  = 28 mW
+```
+
+28 mW spread across a 0402 body or an IC die is nothing. Two consequences, and they are the whole reason this section exists:
+
+- **Thermal localization will not work.** Nothing dissipating 28 mW gets measurably warm. Thermal camera, freeze spray, and the isopropyl-evaporation trick all need roughly 0.5 W at the fault, which means a short under ~20 Ω. Section 1.9 step 1 applies to a hard short, not to this one.
+- **Voltage-gradient (µV drop) tracing will not work either.** It needs hundreds of mA pushed into the rail to raise a measurable IR gradient in the copper plane. At 393 Ω, 500 mA would take ~200 V. Not available, not survivable.
+
+What is left is measurement validation, a cap map built from the good board, non-destructive discrimination, and sequential removal. In that order.
+
+Resistance band to likely cause:
+
+| Rail to GND | Most likely cause |
+|---|---|
+| 0 - 20 Ω | Solder bridge, conductive debris, fully shorted MLCC, fused PMIC output FET |
+| 20 - 200 Ω | Cracked MLCC conducting through the crack |
+| **200 Ω - 2 kΩ** | **Leaky MLCC, damaged IC input / ESD clamp, or surface contamination** |
+| > 5 kΩ | Usually not a fault. Verify against the good board before chasing it |
+
+393 Ω lands in the third band. A capacitor is a reasonable suspect there but it is not the favourite. Ranked by probability: surface contamination, damaged IC on the rail, leaky or cracked cap. Section 2.2 eliminates the first one cheaply, and tells you whether you are looking at silicon instead of a cap.
+
+### 2.2 Step 0: Validate the 393 Ω
+
+A large share of apparent partial shorts are measurement artifacts or dirt. Clear both before any rework.
+
+Conditions, both boards, same session:
+
+1. **Same meter, same range, same leads.** An autoranging meter uses different test currents on different ranges and will hand you two different numbers for the same net.
+2. **Both boards fully bare.** No SD card, no PCIe FFC, no camera/display FFC, no fan, no RTC battery on J5, no HAT on J8, nothing in USB or HDMI, no PSU. An M.2 HAT with its own shorted cap is still a short on your 3V3 rail, and it is not on your board.
+3. **Discharged.** Everything unplugged, hold the power button ~10 s, then briefly short pin 1 to pin 6 with a lead.
+4. **Let it settle 60 s.** The meter's test current charges the rail's bulk capacitance, so the reading climbs for the first several seconds. A number read at 2 s is meaningless.
+
+Then run these four checks.
+
+**Polarity test.** Measure pin 1 to pin 6, then swap the leads.
+
+| Result | Meaning |
+|---|---|
+| Same both ways (393 / 393 Ω) | Resistive path. Cap, contamination, or carbonised track. Continue in this section. |
+| Asymmetric (e.g. 393 Ω / 8 kΩ) | Semiconductor junction. A damaged IC on the rail, **not** a cap. Jump to the fallback in 2.5. |
+
+**Diode mode.** Both boards, both polarities, pin 1 to pin 6. Note the mV. A junction-like reading the good board does not show is the same signal as above.
+
+**Second access point.** Repeat at GPIO pin 17, also 3V3. Same net, so it must match pin 1. If pin 1 reads low and pin 17 reads normal, the fault is on or under the header itself: bent pin, solder splash, or debris between pin 1 and the pin 6 / pin 9 grounds. That is a two-minute fix. Check it.
+
+**Clean the board.** IPA and a soft brush, both sides, with attention to the PMIC cluster, under the GPIO header, around the USB-C, the SD slot lip, and the HDMI and CAM/DISP connectors. Dry it fully — compressed air, then 30 min, or 15 min at 50 °C. Re-measure. Flux residue, condensation salts and solder swarf cause a few-hundred-ohm leak routinely, and the fix is free.
+
+Only a number that survives all four is worth cutting into.
+
+Optional weak signal: measure capacitance pin 1 to pin 6 on both boards. A 393 Ω parallel path makes most DMM capacitance ranges read garbage or time out, so treat a wild difference as further confirmation of the resistive path, not as evidence against a specific cap.
+
+### 2.3 Build the 3V3 Cap Map from the Good Board
+
+Raspberry Pi does not publish a full Pi 5 schematic or a component designator map. You do not need one.
+
+The 3V3 net touches dozens of 0201 and 0402 ceramics spread across the PMIC cluster, the SoC, RP1, the SPI flash area, the SD slot and the connectors. You cannot work on all of them, and most of the caps around the PMIC are on *other* rails — the DA9091 also makes the 0.8 V, 1.1 V and 1.8 V rails. Pulling one of those teaches you nothing and costs you a part.
+
+So build the map first, on the **good** board, where a mistake is free.
+
+Method, good board, unpowered and bare:
+
+1. Clip or tape one probe to GPIO pin 1 (3V3). You need a free hand.
+2. With the other probe, touch each pad of every small passive in the target regions. Use the **low-ohm range and read the number** — not the continuity beeper. On a net with this much capacitance the beeper chirps on the charging transient of almost any cap and gives constant false hits.
+3. A pad reading **< 1 Ω** is on the 3V3 net. Record it.
+4. Confirm the part's *other* pad reads < 1 Ω to GND (pin 6). Both conditions together mean it is a 3V3 decoupling cap. One pad on 3V3 and the other going somewhere else is a series element — leave it alone.
+
+Regions to sweep, in order of how much your time is worth there:
+
+| Region | Where | Note |
+|---|---|---|
+| PMIC cluster | Top side: the Renesas-marked IC beside the USB-C connector, with the inductor bank | Highest cap density on the board, and most of it is not 3V3. The map matters most here. |
+| SPI flash / RTC | Bottom side, around the FLASH WP silkscreen, TP13 / TP14 / TP16 | Few parts, easy access, worth doing early |
+| SD slot | Bottom side, around J9 and the SOT-23 beside it | 3V3 card power, easy access |
+| Connector rails | Top side: CAM/DISP J3 / J4, PCIe J20, HDMI, PoE header | Easy access, low part count |
+| RP1 | Bottom side, the cluster near TP64 / TP44 under the RP1 BGA | 3V3 I/O present, mixed with other rails |
+| SoC decoupling | Bottom side, the dense 0201 field under the BCM2712 footprint | Mostly core and DDR rails. Hardest to rework. Last. |
+
+Also sweep the bottom-side test points. Several TPs sit on power rails, and they are gold, large and probe-friendly. Any TP reading < 1 Ω to pin 1 on the good board gives you convenient 3V3 access on the suspect board without stabbing at 0201 pads.
+
+Record as you go:
+
+```
+| # | Side | Region | Nearest marking | Size | On 3V3? | Notes |
+```
+
+Then photograph both boards at the same angle and annotate the map onto the photo. `img/20261001_112322.jpg` and `img/20261001_112335.jpg` work as bases.
+
+### 2.4 Narrow It Down Without Removing Anything
+
+Work only on parts your map says are on 3V3. Three passes, cheapest first.
+
+**Pass 1 — optical, 20-40×.** USB microscope or a loupe. Compare suspect against good, region by region, same magnification. Look for a diagonal crack across an MLCC body (the classic flex and thermal-cycle failure, usually near a board corner, a mounting hole, or a connector that gets levered), a chipped corner, darkening or a brown halo on the body or pads, a solder ball or whisker bridging a part, a lifted or tombstoned part. On this board also check the white residue visible on the bottom side near TP64/TP10 and near TP61/TP32 in `img/20261001_112347.jpg` — probably flux, but confirm it is not a leakage path before dismissing it. Photograph anything suspicious before touching it.
+
+**Pass 2 — press test.** Meter on pin 1 / pin 6, eyes on the reading. With a wooden or plastic probe, never metal, press each mapped 3V3 cap firmly, one at a time. A cracked MLCC often changes resistance under pressure as the crack faces move. A jump of more than a few percent marks that part. No change anywhere does not clear the board.
+
+**Pass 3 — localized heat.** The one technique that actually works at 393 Ω. Leakage through a cracked dielectric, and leakage through a damaged junction, both rise steeply with temperature, while healthy parts barely move.
+
+1. Meter on pin 1 / pin 6, baseline logged. Let the board sit at room temperature 10 min first.
+2. Fine hot-air nozzle (3-4 mm) at **low airflow, 150-200 °C**, or a clean iron tip at ~150 °C touched to the part body. You are warming, not reflowing.
+3. Heat one mapped 3V3 cap ~10 s. Watch the meter.
+4. Let it cool 30 s. Next part.
+
+Interpretation: the faulty part drops the rail resistance noticeably and reversibly while hot — tens of percent, not single digits. Warm a few known-good parts first to learn what "nothing" looks like on your setup; that is your control.
+
+Cautions. Keep airflow low or you will launch 0201s. Heat conducts a couple of millimetres, so a hit localizes a *neighbourhood*, not a part — confirm by re-heating each candidate individually from different directions. Do not exceed ~200 °C or you start reflowing joints.
+
+This pass tells you **where**, not **what**. If the hot spot contains an IC as well as caps, the IC is still in play.
+
+### 2.5 Sequential Removal
+
+Only after 2.2, 2.3 and 2.4. If a pass flagged a part, pull that one first. Otherwise work the map in order of access and consequence:
+
+1. Parts flagged by the press or heat test.
+2. Visually suspect parts.
+3. Easy-access, low-consequence regions: connector rails, SD slot, SPI flash area.
+4. PMIC cluster 3V3 caps.
+5. SoC and RP1 bottom-side 0201s. Last — highest risk of collateral damage, hardest to replace.
+
+Rework setup for a Pi 5:
+
+- **Preheat is not optional.** This is a multilayer board with heavy internal copper that sinks heat away fast. Bottom preheater or hot plate at 130-150 °C, soak 3-5 min. Without it you dwell on the joint until the pad lifts.
+- Hot air: 4 mm nozzle, 330-360 °C, the lowest airflow that still works.
+- Flux the part and add a little leaded solder to both ends first. The leaded mix drops the melting point and the part releases sooner.
+- Kapton over neighbouring parts. A 0201 three millimetres away will take off.
+- Photograph the area before every removal. 0201s are 0.6 × 0.3 mm and you will not remember where it came from.
+- Each removed part into its own labelled piece of tape. You are putting them back.
+
+The loop, per part:
+
+```
+1. Photograph the area
+2. Remove the part
+3. Measure the removed part off-board, ohms, both polarities
+4. Measure the rail: GPIO pin 1 to pin 6, 60 s settle
+5. Log it
+```
+
+| Removed part reads | Rail after removal | Verdict |
+|---|---|---|
+| Low Ω (hundreds or less) | Jumps toward ~24 kΩ | Found it. That part was the short. |
+| Open (megohms) | Jumps toward ~24 kΩ | Re-measure both. Usually the removal cleared a bridge or debris rather than the part being bad. Inspect the pads. |
+| Open | Still ~393 Ω | Not it. Reinstall or set aside, continue. |
+
+Log template:
+
+```
+| # | Part / location | Removed reading | Rail after | Reinstalled? |
+```
+
+**Fallback: every mapped 3V3 cap is off and the rail still reads ~393 Ω.** Then the load is an IC on the rail — which the 2.2 polarity test has probably already told you. Candidates, ordered by how attackable they are: the SPI flash, the small RTC and ancillary parts, the SD interface parts, the Ethernet PHY, RP1, the SoC, the PMIC itself. Realistically only the small ones are worth removing. Pulling RP1, the BCM2712 or the PMIC to prove a diagnosis destroys the board's salvage value and needs a reball to undo. At that point take the call in 2.6.
+
+### 2.6 After the Fix, and the Honest Prognosis
+
+If the rail recovered:
+
+- The board will bench-boot missing one decoupling cap. Do that first to confirm the fix: re-run Test C (1.6), Test D (1.7), then power up.
+- Then replace the part. Get the value by measuring the equivalent part on the good board with an LCR meter, or by matching it to its identical neighbours.
+- Do not leave a cap off permanently. Missing decoupling on a 3V3 rail feeding RP1 or the SoC shows up later as intermittent instability, which is a much worse fault to chase than this one.
+- Re-measure pin 1 to pin 6 after reinstalling. It should sit at the good board's value.
+
+Prognosis, stated plainly so you can decide where to stop:
+
+- The cheap steps — 2.2 validation and cleaning — genuinely resolve a real share of few-hundred-ohm faults, and they cost about an hour.
+- Past that you are hunting an unlabelled part on a board with no published schematic, mostly 0201s, mostly on the dense bottom side. With a microscope, hot air and preheat it is doable. Without all three it is not.
+- A replacement Pi 5 costs less than the rework gear this needs. The reason to continue is that you want to, not that it pays. That is a fine reason — just do not discover it four hours in.
+
+Set a stopping rule before you start. A reasonable one: stop after 2.4 if nothing is flagged and you do not already own preheat, hot air and magnification.
+
+### 2.7 Tools
+
+Required:
+
+- DMM, 4+ digits, manual range, decent low-ohm accuracy. Both boards measured with this one meter.
+- 20-40× magnification: USB microscope or stereo scope.
+- Hot air station with fine nozzles, plus a preheater or hot plate.
+- Fine tweezers, flux, leaded solder, braid, IPA, Kapton tape.
+- The known-good Pi 5, same board revision where possible.
+
+Useful:
+
+- LCR meter, to read replacement values off the good board.
+- Bench supply — for Test E (1.8) only. Do not current-inject this rail, see 2.1.
+
+Not useful here, despite being the standard advice:
+
+- Thermal camera. 28 mW produces nothing to see.
+- Current injection and gradient tracing. Both need a sub-20 Ω short.
