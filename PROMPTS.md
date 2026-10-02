@@ -14,7 +14,7 @@ No image generator has an accurate internal model of the Raspberry Pi 5's compon
 
 ## A. Annotate Your Own Board Photos (most accurate — use this one)
 
-For ChatGPT with image upload. Attach `img/20261001_112322.jpg` (top side) and `img/20261001_112335.jpg` (bottom side).
+For ChatGPT with image upload. Attach your own top-side and bottom-side photographs of the suspect board. (The originals, `img/20261001_112322.jpg` and `img/20261001_112335.jpg`, were removed from the repository in `9cce0aa`; `img/pi5_board_top.png` and `img/pi5_board_bottom.png` are clean *reference* boards and are not a substitute for photographs of the actual unit.)
 
 ```
 I am troubleshooting a Raspberry Pi 5 with a partial short on the 3.3V rail

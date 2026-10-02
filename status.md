@@ -39,7 +39,6 @@ Inspect both sides of the board for defects, damages or burn marks: It's all goo
 
 ![isclean1](img/isclean1.png)
 ![isclean2](img/isclean2.png)
-![isclean3](img/isclean3.png)
 
 ### 3.4 Test 5V Input Rail Resistance -- GOOD
 	
